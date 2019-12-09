@@ -5,6 +5,7 @@ provider "azurerm" {
   tenant_id       = "f866304f-d87c-4d36-9da5-c8f4ce996da2"
 }
 
+# Create a resource group if it doesn’t exist
 resource "azurerm_resource_group" "myterraformgroup" {
   name     = "myResourceGroup"
   location = "West Europe"
@@ -13,6 +14,8 @@ resource "azurerm_resource_group" "myterraformgroup" {
     environment = "Terraform Demo"
   }
 }
+
+# Create virtual network
 resource "azurerm_virtual_network" "myterraformnetwork" {
   name                = "myVnet"
   address_space       = ["10.0.0.0/16"]
@@ -22,42 +25,17 @@ resource "azurerm_virtual_network" "myterraformnetwork" {
   tags = {
     environment = "Terraform Demo"
   }
-
-
 }
 
-
-# Create Network Security Group and rule
-resource "azurerm_network_security_group" "myterraformnsg" {
-    name                = "myNetworkSecurityGroup"
-    location            = "West Europe"
-    resource_group_name = azurerm_resource_group.myterraformgroup.name
-    
-    security_rule {
-        name                       = "SSH"
-        priority                   = 1001
-        direction                  = "Inbound"
-        access                     = "Allow"
-        protocol                   = "Tcp"
-        source_port_range          = "*"
-        destination_port_range     = "22"
-        source_address_prefix      = "*"
-        destination_address_prefix = "*"
-    }
-
-    tags = {
-        environment = "Terraform Demo"
-    }
-}
-
-
+# Create subnet
 resource "azurerm_subnet" "myterraformsubnet" {
   name                 = "mySubnet"
   resource_group_name  = azurerm_resource_group.myterraformgroup.name
   virtual_network_name = azurerm_virtual_network.myterraformnetwork.name
-  address_prefix       = "10.0.2.0/24"
+  address_prefix       = "10.0.1.0/24"
 }
 
+# Create public IPs
 resource "azurerm_public_ip" "myterraformpublicip" {
   name                = "myPublicIP"
   location            = "West Europe"
@@ -69,8 +47,30 @@ resource "azurerm_public_ip" "myterraformpublicip" {
   }
 }
 
+# Create Network Security Group and rule
+resource "azurerm_network_security_group" "myterraformnsg" {
+  name                = "myNetworkSecurityGroup"
+  location            = "West Europe"
+  resource_group_name = azurerm_resource_group.myterraformgroup.name
 
+  security_rule {
+    name                       = "SSH"
+    priority                   = 1001
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
 
+  tags = {
+    environment = "Terraform Demo"
+  }
+}
+
+# Create network interface
 resource "azurerm_network_interface" "myterraformnic" {
   name                      = "myNIC"
   location                  = "West Europe"
@@ -79,9 +79,9 @@ resource "azurerm_network_interface" "myterraformnic" {
 
   ip_configuration {
     name                          = "myNicConfiguration"
-    subnet_id                     = "${azurerm_subnet.myterraformsubnet.id}"
+    subnet_id                     = azurerm_subnet.myterraformsubnet.id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = "${azurerm_public_ip.myterraformpublicip.id}"
+    public_ip_address_id          = azurerm_public_ip.myterraformpublicip.id
   }
 
   tags = {
@@ -89,6 +89,7 @@ resource "azurerm_network_interface" "myterraformnic" {
   }
 }
 
+# Generate random text for a unique storage account name
 resource "random_id" "randomId" {
   keepers = {
     # Generate a new ID only when a new resource group is defined
@@ -98,22 +99,20 @@ resource "random_id" "randomId" {
   byte_length = 8
 }
 
+# Create storage account for boot diagnostics
 resource "azurerm_storage_account" "mystorageaccount" {
   name                     = "diag${random_id.randomId.hex}"
   resource_group_name      = azurerm_resource_group.myterraformgroup.name
   location                 = "West Europe"
-  account_replication_type = "LRS"
   account_tier             = "Standard"
+  account_replication_type = "LRS"
 
   tags = {
     environment = "Terraform Demo"
   }
 }
 
-
-
-
-
+# Create virtual machine
 resource "azurerm_virtual_machine" "myterraformvm" {
   name                  = "myVM"
   location              = "West Europe"
@@ -137,11 +136,17 @@ resource "azurerm_virtual_machine" "myterraformvm" {
 
   os_profile {
     computer_name  = "myvm"
-    admin_username = "azureuser"
+    admin_username = "manxome"
+    admin_password = "Password1234!"
   }
 
   os_profile_linux_config {
-    disable_password_authentication = true
+    disable_password_authentication = false
+
+    /* ssh_keys {
+            path     = "/home/azureuser/.ssh/authorized_keys"
+            key_data = "ssh-rsa AAAAB3Nz{snip}hwhqT9h"
+        } */
   }
 
   boot_diagnostics {
@@ -149,5 +154,7 @@ resource "azurerm_virtual_machine" "myterraformvm" {
     storage_uri = azurerm_storage_account.mystorageaccount.primary_blob_endpoint
   }
 
-
+  tags = {
+    environment = "Terraform Demo"
+  }
 }
